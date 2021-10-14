@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2020 NXP
+ *  Copyright 2018-2021 NXP
  *
  ******************************************************************************/
 
@@ -96,6 +96,8 @@ static void nfa_hci_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
 static void nfa_hci_timer_cback (TIMER_LIST_ENT *p_tle);
 static void nfa_hci_set_receive_buf(tNFA_HCI_PIPE_CMDRSP_INFO  *p_pipe_cmdrsp_info);
 static bool nfa_hci_assemble_msg(uint8_t* p_data, uint16_t data_len);
+static void nfa_hci_app_notify_evt_transaction(uint8_t pipe, uint8_t* p_data,
+        uint16_t data_len);
 #else
 static void nfa_hci_set_receive_buf(uint8_t pipe);
 static void nfa_hci_assemble_msg(uint8_t* p_data, uint16_t data_len);
@@ -281,6 +283,7 @@ void nfa_hci_ee_info_cback(tNFA_EE_DISC_STS status) {
                       nfa_hciu_clear_host_resetting(nfa_hci_cb.curr_nfcee, NFCEE_REINIT);
                       nfa_hci_cb.next_nfcee_idx += 1;
                     }
+                    nfa_hciu_send_get_param_cmd(NFA_HCI_ADMIN_PIPE, NFA_HCI_HOST_LIST_INDEX);
                     if(!nfa_hci_check_set_apdu_pipe_ready_for_next_host ()) {
                       DLOG_IF(INFO, nfc_debug_enabled)
                           << StringPrintf("NFCEE_HCI_NOTIFY_ALL_PIPE_CLEARED () reset handling");
@@ -313,6 +316,19 @@ void nfa_hci_ee_info_cback(tNFA_EE_DISC_STS status) {
                        nfa_hciu_send_to_all_apps(NFA_HCI_INIT_COMPLETED, &evt_data);
                      }
                      break;
+                 } else if (nfa_hci_cb.reset_host[xx].reset_cfg &
+                                NFCEE_HCI_NOTIFY_ALL_PIPE_CLEARED &&
+                            !nfa_hci_cb.se_apdu_gate_support) {
+                   /*In case SMB/Wired mode disabled and if we receive clear all
+                    * pipe shall clear host reset status on receiving mode set
+                    * ntf*/
+                   nfa_hciu_clear_host_resetting(
+                       nfa_hci_cb.curr_nfcee,
+                       NFCEE_HCI_NOTIFY_ALL_PIPE_CLEARED);
+                   /*check if any NFCEE init pending if not shall perform
+                    * startup complete to put power link status to default */
+                   if (!nfa_hci_enable_one_nfcee())
+                     nfa_hci_startup_complete(NFA_STATUS_OK);
                  } else if (nfa_hci_cb.reset_host[xx].reset_cfg & NFCEE_INIT_COMPLETED) {
                      if(nfa_hciu_find_dyn_apdu_pipe_for_host (nfa_hci_cb.reset_host[xx].host_id) == nullptr)
                      {
@@ -378,9 +394,8 @@ void nfa_hci_ee_info_cback(tNFA_EE_DISC_STS status) {
                 nfa_hciu_add_host_resetting(nfa_ee_cb.ecb[ee_entry_index].nfcee_id, NFCEE_INIT_COMPLETED);
               }
             }
-          }
-          else if (nfa_ee_cb.ecb[ee_entry_index].nfcee_status == NFC_NFCEE_STS_UNRECOVERABLE_ERROR
-                  || (nfa_ee_cb.ecb[ee_entry_index].nfcee_status &  0xF0 ) == NFC_NFCEE_STS_PROP_UNRECOVERABLE_ERROR) {
+          } else if (nfa_ee_check_recovery_required(
+                         nfa_ee_cb.ecb[ee_entry_index].nfcee_status)) {
             nfa_ee_cb.ecb[ee_entry_index].nfcee_status = NFC_NFCEE_STS_INIT_STARTED;
             if (!((nfa_hci_cb.hci_state == NFA_HCI_STATE_WAIT_NETWK_ENABLE) ||
               (nfa_hci_cb.hci_state == NFA_HCI_STATE_RESTORE_NETWK_ENABLE))) {
@@ -395,6 +410,7 @@ void nfa_hci_ee_info_cback(tNFA_EE_DISC_STS status) {
                 nfa_hci_cb.hci_state = NFA_HCI_STATE_IDLE;
                 nfa_hci_cb.curr_nfcee = nfa_ee_cb.ecb[ee_entry_index].nfcee_id;
                 nfa_hci_cb.next_nfcee_idx = 0x00;
+                NFC_NfceeClearWaitModeSetNtf();
                 if(NFC_NfceeDiscover(true) == NFC_STATUS_FAILED) {
                   DLOG_IF(INFO, nfc_debug_enabled)
                     << StringPrintf("NFA_EE_RECOVERY unable to perform");
@@ -780,7 +796,7 @@ void nfa_hci_dh_startup_complete(void) {
       nfa_hci_cb.ee_disable_disc = true;
     /* Received HOT PLUG EVT, we will also wait for EE DISC REQ Ntf(s) */
     nfa_sys_start_timer(&nfa_hci_cb.timer, NFA_HCI_RSP_TIMEOUT_EVT,
-                        p_nfa_hci_cfg->hci_netwk_enable_timeout);
+                        NFA_EE_DISCV_TIMEOUT_VAL);
   } else {
     /* Received EE DISC REQ Ntf(s) */
 #if(NXP_EXTNS == TRUE)
@@ -802,6 +818,8 @@ void nfa_hci_dh_startup_complete(void) {
 *******************************************************************************/
 void nfa_hci_startup_complete(tNFA_STATUS status) {
   tNFA_HCI_EVT_DATA evt_data;
+
+  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("Status: %u", status);
 
   nfa_sys_stop_timer(&nfa_hci_cb.timer);
 
@@ -1059,6 +1077,8 @@ static void nfa_hci_sys_enable(void) {
 #if(NXP_EXTNS == TRUE)
   nfa_hci_cb.se_apdu_gate_support =
       NfcConfig::getUnsigned(NAME_NXP_SE_APDU_GATE_SUPPORT, 0x00);
+  nfa_hci_cb.uicc_etsi_support =
+      NfcConfig::getUnsigned(NAME_NXP_UICC_ETSI_SUPPORT, 0x00);
 #endif
 }
 
@@ -1093,6 +1113,36 @@ static void nfa_hci_sys_disable(void) {
   nfa_sys_deregister(NFA_ID_HCI);
 }
 
+#if (NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function         nfa_hci_app_notify_evt_transaction
+**
+** Description      This function shall be called to notify HCI_EVT_TRANSACTION
+**                  received on PIPE which hasn't created during initialization.
+**
+** Returns          None
+**
+*******************************************************************************/
+static void nfa_hci_app_notify_evt_transaction(uint8_t pipe, uint8_t* p,
+        uint16_t pkt_len) {
+  tNFA_HCI_EVT_DATA evt_data;
+  uint8_t type = ((*p) >> 0x06) & 0x03;
+  uint8_t inst = (*p++ & 0x3F);
+  if (pkt_len != 0) pkt_len--;
+  if (type == NFA_HCI_EVENT_TYPE) {
+    if (inst == NFA_HCI_EVT_TRANSACTION) {
+      evt_data.rcvd_evt.pipe = pipe;
+      evt_data.rcvd_evt.evt_code = inst;
+      evt_data.rcvd_evt.evt_len = pkt_len;
+      evt_data.rcvd_evt.p_evt_buf = p;
+      /* notify NFA_HCI_EVENT_RCVD_EVT to the application */
+      nfa_hciu_send_to_apps_handling_connectivity_evts(NFA_HCI_EVENT_RCVD_EVT,
+              &evt_data);
+    }
+  }
+}
+#endif
 /*******************************************************************************
 **
 ** Function         nfa_hci_conn_cback
@@ -1111,7 +1161,6 @@ static void nfa_hci_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
   uint16_t pkt_len;
   const uint8_t MAX_BUFF_SIZE = 100;
   char buff[MAX_BUFF_SIZE];
-
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
       "%s State: %u  Cmd: %u", __func__, nfa_hci_cb.hci_state, event);
 #if(NXP_EXTNS == TRUE)
@@ -1178,6 +1227,14 @@ static void nfa_hci_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
   p = (uint8_t*)(p_pkt + 1) + p_pkt->offset;
   pkt_len = p_pkt->len;
 
+  if (pkt_len < 1) {
+    LOG(ERROR) << StringPrintf("Insufficient packet length! Dropping :%u bytes",
+                               pkt_len);
+    /* release GKI buffer */
+    GKI_freebuf(p_pkt);
+    return;
+  }
+
   chaining_bit = ((*p) >> 0x07) & 0x01;
   pipe = (*p++) & 0x7F;
   if (pkt_len != 0) pkt_len--;
@@ -1187,6 +1244,9 @@ static void nfa_hci_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
   if (!p_pipe_cmdrsp_info)
   {
       /* Cannot find the pipe in the control block */
+      if(pipe != NfcConfig::getUnsigned(NAME_OFF_HOST_ESE_PIPE_ID, 0x16)) {
+          nfa_hci_app_notify_evt_transaction(pipe, p,pkt_len);
+      }
       GKI_freebuf (p_pkt);
       return;
   }
@@ -1195,6 +1255,14 @@ static void nfa_hci_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
 #else
   if (nfa_hci_cb.assembling == false) {
 #endif
+    if (pkt_len < 1) {
+      LOG(ERROR) << StringPrintf(
+          "Insufficient packet length! Dropping :%u bytes", pkt_len);
+      /* release GKI buffer */
+      GKI_freebuf(p_pkt);
+      return;
+    }
+
     /* First Segment of a packet */
     nfa_hci_cb.type = ((*p) >> 0x06) & 0x03;
     nfa_hci_cb.inst = (*p++ & 0x3F);
@@ -1310,6 +1378,11 @@ static void nfa_hci_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
 #if(NXP_EXTNS == TRUE)
   if (nfa_hci_cb.type == NFA_HCI_EVENT_TYPE) {
           /* Response APDU: stop the timers */
+
+      /*Do not stop the timer for WTX event, if atr response not received. This
+       * allows timeout in case atr response is not received at all, which helps
+       * upper layer API to get unblocked and take necessary action*/
+      if(!(p_pipe_cmdrsp_info->w4_atr_evt && nfa_hci_cb.inst == NFA_HCI_EVT_WTX))
       nfa_sys_stop_timer (&(p_pipe_cmdrsp_info->rsp_timer));
       if(p_pipe_cmdrsp_info->w4_rsp_apdu_evt) {
       /*Clear chaining resp pending once full resp is received*/
@@ -1785,6 +1858,7 @@ static bool nfa_hci_evt_hdlr(NFC_HDR* p_msg) {
     nfa_nv_co_write((uint8_t*)&nfa_hci_cb.cfg, sizeof(nfa_hci_cb.cfg),
                     DH_NV_BLOCK);
   }
+
   return false;
 }
 

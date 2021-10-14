@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2019 NXP
+ *  Copyright 2018-2020 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -78,6 +78,7 @@ enum {
                                 tech.  */
   NFA_EE_CLEAR_TECH_CFG_EVT, /* The status for clearing the routing based on RF
                               tech.  */
+
   NFA_EE_SET_PROTO_CFG_EVT,   /* The status for setting the routing based on
                                  protocols */
   NFA_EE_CLEAR_PROTO_CFG_EVT, /* The status for clearing the routing based on
@@ -90,11 +91,11 @@ enum {
   NFA_EE_NEW_EE_EVT, /* A new NFCEE is discovered                             */
   NFA_EE_ACTION_EVT, /* An action happened in NFCEE                           */
   NFA_EE_DISCOVER_REQ_EVT, /* NFCEE Discover Request Notification */
+  NFA_EE_PWR_AND_LINK_CTRL_EVT, /* NFCEE power and link ctrl */
   NFA_EE_NO_MEM_ERR_EVT,   /* Error - out of GKI buffers */
   NFA_EE_NO_CB_ERR_EVT, /* Error - Can not find control block or wrong state */
 #if (NXP_EXTNS == TRUE)
   NFA_EE_SET_MODE_INFO_EVT,
-  NFA_EE_PWR_LINK_CTRL_EVT, /* NFCEE Pwr and link cotnrol command Evt */
   NFA_EE_ADD_APDU_EVT,  /* The status for adding an APDU pattern to a routing table entry*/
   NFA_EE_REMOVE_APDU_EVT /* The status for removing an APDU pattern from a routing table */
 #endif
@@ -203,10 +204,6 @@ typedef struct {
   tNFA_STATUS status;
   uint8_t nfcee_id;
 } tNFA_EE_SET_MODE_INFO;
-typedef struct {
-  tNFA_STATUS status;       /* NFA_STATUS_OK is successful  */
-  tNFA_EE_STATUS ee_status; /* The NFCEE status             */
-} tNFA_EE_PWR_LNK_CTRL;
 #endif
 typedef struct {
   tNFA_HANDLE ee_handle;          /* Handle of MFCEE      */
@@ -259,7 +256,6 @@ typedef union {
   tNFA_EE_MODE_SET mode_set;
 #if (NXP_EXTNS == TRUE)
   tNFA_EE_SET_MODE_INFO ee_set_mode_info;
-  tNFA_EE_PWR_LNK_CTRL pwr_lnk_ctrl;
 #endif
   tNFA_EE_INFO new_ee;
   tNFA_EE_DISCOVER_REQ discover_req;
@@ -549,53 +545,18 @@ extern tNFA_STATUS NFA_EeAddSystemCodeRouting(uint16_t systemcode,
 **
 *******************************************************************************/
 extern tNFA_STATUS NFA_EeRemoveSystemCodeRouting(uint16_t systemcode);
-#if (NXP_EXTNS == TRUE)
-/*******************************************************************************
-**
-** Function         NFA_EeAddApduPatternRouting
-**
-** Description      This function is called to add an APDU pattern entry in the
-**                  listen mode routing table in NFCC. The status of this
-**                  operation is reported as the NFA_EE_ADD_APDU_EVT.
-**
-** Note:            If RF discovery is started,
-**                  NFA_StopRfDiscovery()/NFA_RF_DISCOVERY_STOPPED_EVT should
-**                  happen before calling this function
-**
-** Note:            NFA_EeUpdateNow() should be called after last NFA-EE
-**                  function to change the listen mode routing is called.
-**
-** Returns          NFA_STATUS_OK if successfully initiated
-**                  NFA_STATUS_FAILED otherwise
-**                  NFA_STATUS_INVALID_PARAM If bad parameter
-**
-*******************************************************************************/
-extern tNFA_STATUS NFA_EeAddApduPatternRouting(uint8_t apdu_data_len,uint8_t* apdu_data, uint8_t apdu_mask_len,
-  uint8_t* apdu_mask, tNFA_HANDLE ee_handle, uint8_t power_state);
 
 /*******************************************************************************
 **
-** Function         NFA_EeRemoveApduPatternRouting
+** Function         NFA_GetAidTableSize
 **
-** Description      This function is called to remove the given APDU pattern entry from
-**                  the listen mode routing table. If the entry configures VS,
-**                  it is also removed. The status of this operation is reported
-**                  as the NFA_EE_REMOVE_APDU_EVT.
+** Description      This function is called to get the AID routing table size.
 **
-** Note:            If RF discovery is started,
-**                  NFA_StopRfDiscovery()/NFA_RF_DISCOVERY_STOPPED_EVT should
-**                  happen before calling this function
-**
-** Note:            NFA_EeUpdateNow() should be called after last NFA-EE
-**                  function to change the listen mode routing is called.
-**
-** Returns          NFA_STATUS_OK if successfully initiated
-**                  NFA_STATUS_FAILED otherwise
-**                  NFA_STATUS_INVALID_PARAM If bad parameter
+** Returns          Maximum AID routing table size.
 **
 *******************************************************************************/
-extern tNFA_STATUS NFA_EeRemoveApduPatternRouting(uint8_t apdu_len, uint8_t* p_apdu);
-#endif
+extern uint16_t NFA_GetAidTableSize();
+
 /*******************************************************************************
 **
 ** Function         NFA_EeGetLmrtRemainingSize
@@ -677,6 +638,22 @@ extern tNFA_STATUS NFA_EeSendData(tNFA_HANDLE ee_handle, uint16_t data_len,
 *******************************************************************************/
 extern tNFA_STATUS NFA_EeDisconnect(tNFA_HANDLE ee_handle);
 
+/*******************************************************************************
+**
+** Function         NFA_EePowerAndLinkCtrl
+**
+** Description      This Control Message is used by the DH to constrain the way
+**                  the NFCC manages the power supply and communication links
+**                  between the NFCC and its connected NFCEEs.
+**
+** Returns          NFA_STATUS_OK if successfully initiated
+**                  NFA_STATUS_FAILED otherwise
+**                  NFA_STATUS_INVALID_PARAM If bad parameter
+**
+*******************************************************************************/
+extern tNFA_STATUS NFA_EePowerAndLinkCtrl(tNFA_HANDLE ee_handle,
+                                          uint8_t config);
+
 #if (NXP_EXTNS == TRUE)
 /*******************************************************************************
 **
@@ -693,28 +670,6 @@ extern tNFA_STATUS NFA_EeDisconnect(tNFA_HANDLE ee_handle);
 **
 *******************************************************************************/
 extern tNFA_STATUS NFA_AllEeGetInfo(uint8_t* p_num_nfcee, tNFA_EE_INFO* p_info);
-/*******************************************************************************
-**
-** Function         NFA_SendPowerLinkCommand
-**
-** Description      This function sends the power link control command
-**
-** Returns          NFA_STATUS_OK if successfully initiated
-**                  NFA_STATUS_FAILED otherwise
-**                  NFA_STATUS_INVALID_PARAM If bad parameter
-**
-*******************************************************************************/
-extern tNFA_STATUS NFA_SendPowerLinkCommand(uint8_t nfcee_id, uint8_t cfg_value);
-/*******************************************************************************
-**
-** Function         NFA_GetAidTableSize
-**
-** Description      This function is called to get the AID routing table size.
-**
-** Returns          Maximum AID routing table size.
-**
-*******************************************************************************/
-extern uint16_t NFA_GetAidTableSize();
 
 /*******************************************************************************
 **

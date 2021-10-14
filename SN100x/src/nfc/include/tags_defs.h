@@ -15,7 +15,23 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-
+/******************************************************************************
+ *
+ *  Copyright 2020 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
 /******************************************************************************
  *
  *  This file contains the Near Field Communication (NFC) Tags related
@@ -366,15 +382,24 @@ typedef uint8_t tT3T_POLL_RC;
 #define T4T_CMD_MIN_HDR_SIZE 4 /* CLA, INS, P1, P2 */
 #define T4T_CMD_MAX_HDR_SIZE 5 /* CLA, INS, P1, P2, Lc */
 
+/* CLA, INS, P1, P2, Data ODO */
+#define T4T_CMD_MIN_EXT_HDR_SIZE 9
+/* CLA, INS, P1, P2, Lc, Data ODO, Le
+ * with Lc and Le coded using Extended Field Coding */
+#define T4T_CMD_MAX_EXT_HDR_SIZE 15
+
+#define T4T_VERSION_3_0 0x30 /* version 3.0 */
 #define T4T_VERSION_2_0 0x20 /* version 2.0 */
 #define T4T_VERSION_1_0 0x10 /* version 1.0 */
-#define T4T_MY_VERSION T4T_VERSION_2_0
+#define T4T_MY_VERSION T4T_VERSION_3_0
 #define T4T_GET_MAJOR_VERSION(x) ((x) >> 4)
 
 #define T4T_CMD_CLASS 0x00
 #define T4T_CMD_INS_SELECT 0xA4
 #define T4T_CMD_INS_READ_BINARY 0xB0
 #define T4T_CMD_INS_UPDATE_BINARY 0xD6
+#define T4T_CMD_INS_READ_BINARY_ODO 0xB1
+#define T4T_CMD_INS_UPDATE_BINARY_ODO 0xD7
 #define T4T_CMD_DES_CLASS 0x90
 #define T4T_CMD_INS_GET_HW_VERSION 0x60
 #define T4T_CMD_CREATE_AID 0xCA
@@ -400,7 +425,10 @@ typedef uint8_t tT3T_POLL_RC;
 #define T4T_RSP_WRONG_LENGTH 0x6700
 #define T4T_RSP_INSTR_NOT_SUPPORTED 0x6D00
 #define T4T_RSP_CMD_NOT_ALLOWED 0x6986
-
+#if (NXP_EXTNS == TRUE)
+#define T4T_RSP_WARNING_PARAMS_CHECK(X) \
+  ((X == 0x63 || X == 0x62 || X == 0x61) ? true : false)
+#endif
 /* V1.0 Type 4 Tag Applicaiton ID length */
 #define T4T_V10_NDEF_TAG_AID_LEN 0x07
 /* V2.0 Type 4 Tag Applicaiton ID length */
@@ -415,6 +443,8 @@ typedef uint8_t tT3T_POLL_RC;
 
 #define T4T_VERSION_OFFSET_IN_CC 0x02
 #define T4T_FC_TLV_OFFSET_IN_CC 0x07
+/* size of T(1),L(1),V(8) for extended NDEF file control */
+#define T4T_ENDEF_FC_V_FIELD_OFFSET 0x09
 /* Offset of Write access byte from type field in CC */
 #define T4T_FC_WRITE_ACCESS_OFFSET_IN_TLV 0x07
 
@@ -425,8 +455,18 @@ typedef uint8_t tT3T_POLL_RC;
 /* size of V(6) for file control */
 #define T4T_FILE_CONTROL_LENGTH 0x06
 
+#define T4T_ENDEF_FILE_CONTROL_TYPE 0x06 /* Extended NDEF File Control Type */
+/* size of T(1),L(1),V(8) for extended NDEF file control */
+#define T4T_ENDEF_FILE_CONTROL_TLV_SIZE 0x0A
+/* size of V(8) for extended NDEF file control */
+#define T4T_ENDEF_FILE_CONTROL_LENGTH 0x08
+
 /* read access granted without any security */
 #define T4T_FC_READ_ACCESS 0x00
+/* no read access granted at all */
+#define T4T_FC_NO_READ_ACCESS 0xFF
+/* proprietary read access range start */
+#define T4T_FC_READ_ACCESS_PROP_START 0x80
 /* write access granted without any security */
 #define T4T_FC_WRITE_ACCESS 0x00
 /* proprietary write access range start */
@@ -435,6 +475,7 @@ typedef uint8_t tT3T_POLL_RC;
 #define T4T_FC_NO_WRITE_ACCESS 0xFF
 
 #define T4T_FILE_LENGTH_SIZE 0x02
+#define T4T_EFILE_LENGTH_SIZE 0x04
 #define T4T_ADDI_FRAME_RESP 0xAFU
 #define T4T_DES_GET_VERSION_LEN 0x09
 #define T4T_SIZE_IDENTIFIER_2K 0x16U
@@ -456,6 +497,8 @@ typedef uint8_t tT3T_POLL_RC;
 **
 */
 
+#define I93_VERSION_1_x 0x40 /* major mapping version 1.x */
+
 /* A single sub-carrier frequency shall be used by VICC */
 #define I93_FLAG_SUB_CARRIER_SINGLE 0x00
 
@@ -470,10 +513,13 @@ typedef uint8_t tT3T_POLL_RC;
 /* Protocol format is extended. Reserved for future use */
 #define I93_FLAG_PROT_EXT_YES 0x08
 
-/* Request is addressed. UID field is included. It shall be executed only by
- * VICC */
+/* Request is addressed with AMS (Address Mode Selector). UID field is included.
+ * It shall be executed only by VICC */
 #define I93_FLAG_ADDRESS_SET 0x20
 /* whose UID matches the UID specified in the request */
+/* Request is addressed with SMS (Select Mode Selector). UID field is included
+ * or not.  It shall be executed by the unique VICC to be in SELECTED state */
+#define I93_FLAG_SELECT_SET 0x10
 
 /* AFI field is present     */
 #define I93_FLAG_AFI_PRESENT 0x10
@@ -530,6 +576,7 @@ typedef uint8_t tT3T_POLL_RC;
 #define I93_CMD_GET_MULTI_BLK_SEC 0x2C
 /* Get extended multiple block security status */
 #define I93_CMD_EXT_GET_MULTI_BLK_SEC 0x3C
+#define I93_CMD_SET_ADDR_MODE 0x3D /* Set address mode            */
 
 /* Information flags definition */
 /* DSFID is supported and DSFID field is present */
@@ -558,6 +605,11 @@ typedef uint8_t tT3T_POLL_RC;
 /* Max block size in bytes */
 #define I93_MAX_BLOCK_LENGH 32
 
+/* Block lengths */
+#define I93_BLEN_4BYTES 0x04
+#define I93_BLEN_8BYTES 0x08
+#define I93_BLEN_16BYTES 0x10
+#define I93_BLEN_32BYTES 0x20
 /* ICODE Capability Container(CC) definition */
 #define I93_ICODE_CC_MAGIC_NUMER_E1 0xE1 /* magic number in CC[0]  */
 #define I93_ICODE_CC_MAGIC_NUMER_E2 0xE2 /* magic number in CC[0]  */
@@ -578,6 +630,8 @@ typedef uint8_t tT3T_POLL_RC;
 /* More than 2040 bytes are supported in CC[3] */
 #define I93_STM_CC_OVERFLOW_MASK 0x04
 #define I93_ONS_CC_OVERFLOW_MASK 0x04
+/* Special Frame are supported in CC[3] */
+#define I93_ICODE_CC_SPECIAL_FRAME_MASK 0x10
 
 /* ICODE TLV type */
 #define I93_ICODE_TLV_TYPE_NULL 0x00 /* NULL TLV         */

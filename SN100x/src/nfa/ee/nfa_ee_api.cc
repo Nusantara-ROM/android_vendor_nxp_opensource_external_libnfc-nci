@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2019 NXP
+ *  Copyright 2018-2021 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -304,40 +304,7 @@ tNFA_STATUS NFA_EeDeregister(tNFA_EE_CBACK* p_cback) {
 
   return status;
 }
-#if (NXP_EXTNS == TRUE)
-/*******************************************************************************
-**
-** Function         NFA_SendPowerLinkCommand
-**
-** Description      This function is called to send an NCI Vendor Specific
-**                  command to NFCC.
-**
-**                  nfcee_id             - The NFCEE id.
-**                  cfg_value            - The config value
-**
-** Returns          NFA_STATUS_OK if successfully initiated
-**                  NFA_STATUS_FAILED otherwise
-**
-*******************************************************************************/
-tNFA_STATUS NFA_SendPowerLinkCommand(uint8_t nfcee_id, uint8_t cfg_value) {
-  tNFA_EE_API_POWER_LINK_EVT* p_msg;
 
-  DLOG_IF(INFO, nfc_debug_enabled)
-      << StringPrintf("NFA_SendPowerLinkCommand() nfcee_id=0x%x", nfcee_id);
-
-  if ((p_msg = (tNFA_EE_API_POWER_LINK_EVT*)GKI_getbuf(sizeof(tNFA_EE_API_POWER_LINK_EVT))) != nullptr) {
-    p_msg->hdr.event = NFA_EE_NCI_PWR_LNK_CTRL_SET_EVT;
-    p_msg->nfcee_id= nfcee_id;
-    p_msg->cfg_value = cfg_value;
-    nfa_ee_cb.ese_prv_pwr_cfg = cfg_value;
-    nfa_sys_sendmsg(p_msg);
-
-    return (NFA_STATUS_OK);
-  }
-
-  return (NFA_STATUS_FAILED);
-}
-#endif
 /*******************************************************************************
 **
 ** Function         NFA_EeModeSet
@@ -682,6 +649,7 @@ tNFA_STATUS NFA_EeAddAidRouting(tNFA_HANDLE ee_handle, uint8_t aid_len,
 
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("handle:<0x%x>", ee_handle);
   p_cb = nfa_ee_find_ecb(nfcee_id);
+
   /* validate parameters - make sure the AID is in valid length range */
   if ((p_cb == nullptr) ||
       ((NFA_GetNCIVersion() == NCI_VERSION_2_0) && (aid_len != 0) &&
@@ -689,10 +657,14 @@ tNFA_STATUS NFA_EeAddAidRouting(tNFA_HANDLE ee_handle, uint8_t aid_len,
       ((NFA_GetNCIVersion() != NCI_VERSION_2_0) &&
        ((aid_len == 0) || (p_aid == nullptr) || (aid_len < NFA_MIN_AID_LEN))) ||
       (aid_len > NFA_MAX_AID_LEN)) {
+    LOG(ERROR) << StringPrintf("Bad ee_handle or AID (len=%d)", aid_len);
     status = NFA_STATUS_INVALID_PARAM;
   } else {
     p_msg = (tNFA_EE_API_ADD_AID*)GKI_getbuf(size);
     if (p_msg != nullptr) {
+      if (p_aid != nullptr)
+        DLOG_IF(INFO, nfc_debug_enabled)
+            << StringPrintf("aid:<%02x%02x>", p_aid[0], p_aid[1]);
       p_msg->hdr.event = NFA_EE_API_ADD_AID_EVT;
       p_msg->nfcee_id = nfcee_id;
       p_msg->p_cb = p_cb;
@@ -715,108 +687,7 @@ tNFA_STATUS NFA_EeAddAidRouting(tNFA_HANDLE ee_handle, uint8_t aid_len,
 
   return status;
 }
-#if(NXP_EXTNS == TRUE)
-/*******************************************************************************
-**
-** Function         NFA_EeAddApduPatternRouting
-**
-** Description      This function is called to add an APDU pattern entry in the
-**                  listen mode routing table in NFCC. The status of this
-**                  operation is reported as the NFA_EE_ADD_APDU_EVT.
-**
-** Note:            If RF discovery is started,
-**                  NFA_StopRfDiscovery()/NFA_RF_DISCOVERY_STOPPED_EVT should
-**                  happen before calling this function
-**
-** Note:            NFA_EeUpdateNow() should be called after last NFA-EE
-**                  function to change the listen mode routing is called.
-**
-** Returns          NFA_STATUS_OK if successfully initiated
-**                  NFA_STATUS_FAILED otherwise
-**                  NFA_STATUS_INVALID_PARAM If bad parameter
-**
-*******************************************************************************/
-tNFA_STATUS NFA_EeAddApduPatternRouting(uint8_t apdu_data_len,uint8_t* apdu_data, uint8_t apdu_mask_len,
-  uint8_t* apdu_mask, tNFA_HANDLE ee_handle, uint8_t power_state) {
-  tNFA_EE_API_ADD_APDU* p_msg;
-  tNFA_EE_ECB* p_cb;
-  uint16_t size = sizeof(tNFA_EE_API_ADD_AID) + apdu_data_len + apdu_mask_len;
-  uint8_t nfcee_id = (uint8_t)(ee_handle & 0xFF);
 
-  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf
-  ("NFA_EeAddApduRouting(): handle:<0x%x>", ee_handle);
- p_cb = nfa_ee_find_ecb(nfcee_id);
- if(p_cb == nullptr || apdu_data_len == 0 || apdu_mask_len == 0 || apdu_data == nullptr
-     || apdu_mask == nullptr || apdu_data_len > NFC_MAX_APDU_DATA_LEN
-     || apdu_mask_len > NFC_MAX_APDU_MASK_LEN || apdu_data_len != apdu_mask_len) {
-  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf
-  ("Bad ee_handle or AID (len=%d)", apdu_data_len+apdu_mask_len);
-  return NFA_STATUS_INVALID_PARAM;
- }
- p_msg = (tNFA_EE_API_ADD_APDU*)GKI_getbuf(size);
- if (p_msg == nullptr) {
-   return NFA_STATUS_FAILED;
- }
- p_msg->hdr.event = NFA_EE_API_ADD_APDU_EVT;
- p_msg->apdu_len = apdu_data_len;
- p_msg->mask_len = apdu_mask_len;
- p_msg->power_state = power_state;
- p_msg->nfcee_id = nfcee_id;
- p_msg->p_cb = p_cb;
- p_msg->p_apdu = (uint8_t*)(p_msg + 1);
- memcpy(p_msg->p_apdu, apdu_data, apdu_data_len);
- p_msg->p_mask = (uint8_t*)(p_msg->p_apdu + apdu_data_len);
- memcpy(p_msg->p_mask, apdu_mask, apdu_mask_len);
- nfa_sys_sendmsg(p_msg);
- return NFA_STATUS_OK;
-}
-
-/*******************************************************************************
-**
-** Function         NFA_EeRemoveApduPatternRouting
-**
-** Description      This function is called to remove the given APDU entry from
-**                  the listen mode routing table. If the entry configures VS,
-**                  it is also removed. The status of this operation is reported
-**                  as the NFA_EE_REMOVE_APDU_EVT.
-**
-** Note:            If RF discovery is started,
-**                  NFA_StopRfDiscovery()/NFA_RF_DISCOVERY_STOPPED_EVT should
-**                  happen before calling this function
-**
-** Note:            NFA_EeUpdateNow() should be called after last NFA-EE
-**                  function to change the listen mode routing is called.
-**
-** Returns          NFA_STATUS_OK if successfully initiated
-**                  NFA_STATUS_FAILED otherwise
-**                  NFA_STATUS_INVALID_PARAM If bad parameter
-**
-*******************************************************************************/
-tNFA_STATUS NFA_EeRemoveApduPatternRouting(uint8_t apdu_len, uint8_t* p_apdu) {
-  tNFA_EE_API_REMOVE_APDU* p_msg;
-  tNFA_STATUS status = NFA_STATUS_FAILED;
-  uint16_t size = sizeof(tNFA_EE_API_REMOVE_APDU) + apdu_len;
-
-  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("NFA_EeRemoveApduPatternRouting()");
-  if ((apdu_len == 0) || (p_apdu == nullptr) || (apdu_len > NFC_MAX_APDU_DATA_LEN)) {
-    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("Bad handle");
-    status = NFA_STATUS_INVALID_PARAM;
-  } else {
-    p_msg = (tNFA_EE_API_REMOVE_APDU*)GKI_getbuf(size);
-    if (p_msg != nullptr) {
-      p_msg->hdr.event = NFA_EE_API_REMOVE_APDU_EVT;
-      p_msg->apdu_len = apdu_len;
-      p_msg->p_apdu = (uint8_t*)(p_msg + 1);
-      memcpy(p_msg->p_apdu, p_apdu, apdu_len);
-
-      nfa_sys_sendmsg(p_msg);
-
-      status = NFA_STATUS_OK;
-    }
-  }
-  return status;
-}
-#endif
 /*******************************************************************************
 **
 ** Function         NFA_EeRemoveAidRouting
@@ -964,6 +835,18 @@ tNFA_STATUS NFA_EeRemoveSystemCodeRouting(uint16_t systemcode) {
   }
   return status;
 }
+
+/*******************************************************************************
+**
+** Function         NFA_GetAidTableSize
+**
+** Description      This function is called to get the Maximum AID routing table
+*size.
+**
+** Returns          AID routing table maximum size
+**
+*******************************************************************************/
+uint16_t NFA_GetAidTableSize() { return nfa_ee_find_max_aid_cfg_len(); }
 
 /*******************************************************************************
 **
@@ -1165,19 +1048,62 @@ tNFA_STATUS NFA_EeDisconnect(tNFA_HANDLE ee_handle) {
 
   return status;
 }
-#if (NXP_EXTNS == TRUE)
+
 /*******************************************************************************
 **
-** Function         NFA_GetAidTableSize
+** Function         NFA_EePowerAndLinkCtrl
 **
-** Description      This function is called to get the Maximum AID routing table
-**                  size.
+** Description      This Control Message is used by the DH to constrain the way
+**                  the NFCC manages the power supply and communication links
+**                  between the NFCC and its connected NFCEEs.
 **
-** Returns          AID routing table maximum size
+** Returns          NFA_STATUS_OK if successfully initiated
+**                  NFA_STATUS_FAILED otherwise
+**                  NFA_STATUS_INVALID_PARAM If bad parameter
 **
 *******************************************************************************/
-uint16_t NFA_GetAidTableSize() { return nfa_ee_find_max_aid_cfg_len(); }
+tNFA_STATUS NFA_EePowerAndLinkCtrl(tNFA_HANDLE ee_handle, uint8_t config) {
+  tNFA_EE_API_PWR_AND_LINK_CTRL* p_msg;
+  tNFA_STATUS status = NFA_STATUS_FAILED;
+  uint8_t nfcee_id = (uint8_t)(ee_handle & 0xFF);
+  tNFA_EE_ECB* p_cb;
 
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("handle:<0x%x>, config:<0x%x>", ee_handle, config);
+  p_cb = nfa_ee_find_ecb(nfcee_id);
+
+  if (p_cb == nullptr
+#if(NXP_EXTNS != TRUE)
+  /*
+   * The DH MAY send NFCEE_POWER_AND_LINK_CNTRL_CMD at any time after NCI
+   *  initialization, even for an NFCEE that is disabled or unresponsive.
+   *  The NFCC SHALL use the DH settings when the NFCEE is enabled
+   * */
+  || (p_cb->ee_status != NFA_EE_STATUS_ACTIVE)
+#endif
+  ) {
+    LOG(ERROR) << StringPrintf("Bad ee_handle");
+    status = NFA_STATUS_INVALID_PARAM;
+  } else {
+    p_msg = (tNFA_EE_API_PWR_AND_LINK_CTRL*)GKI_getbuf(
+        sizeof(tNFA_EE_API_PWR_AND_LINK_CTRL));
+    if (p_msg != nullptr) {
+      p_msg->hdr.event = NFA_EE_API_PWR_AND_LINK_CTRL_EVT;
+      p_msg->nfcee_id = nfcee_id;
+      p_msg->config = config;
+#if (NXP_EXTNS == TRUE)
+      nfa_ee_cb.ese_prv_pwr_cfg = config;
+#endif
+      nfa_sys_sendmsg(p_msg);
+
+      status = NFA_STATUS_OK;
+    }
+  }
+
+  return status;
+}
+
+#if (NXP_EXTNS == TRUE)
 /*******************************************************************************
 **
 ** Function         NFA_GetRemainingAidTableSize

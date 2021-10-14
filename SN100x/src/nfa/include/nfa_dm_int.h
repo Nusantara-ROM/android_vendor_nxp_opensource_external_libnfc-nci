@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2019 NXP
+ *  Copyright 2018-2021 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -422,6 +422,9 @@ enum {
 */
 #define NFA_DM_DISC_TIMEOUT_W4_DEACT_NTF (NFC_DEACTIVATE_TIMEOUT * 1000 + 6000)
 
+/* timeout for waiting deactivation NTF in P2P activate mode */
+#define NFA_P2P_DISC_NTF_TIMEOUT 22000
+
 typedef struct {
   uint16_t disc_duration; /* Disc duration                                    */
   tNFA_DM_DISC_FLAGS disc_flags;    /* specific action flags */
@@ -542,7 +545,17 @@ typedef struct {
 **  It returns TRUE if NDEF is handled by connection handover module.
 */
 typedef bool(tNFA_NDEF_CHO_CBACK)(uint32_t ndef_len, uint8_t* p_ndef_data);
-
+#if (NXP_EXTNS == TRUE)
+typedef void(tNFA_WLC_CBACK)(uint16_t event, uint8_t status);
+typedef bool(tNFA_WLC_ACTIVATION)(tNFA_DM_DISC_TECH_PROTO_MASK& disc_mask,
+                                  tNFC_RF_TECH_N_MODE tech_n_mode,
+                                  tNFC_PROTOCOL protocol);
+typedef struct WLC_DATA {
+  tNFA_WLC_CBACK* p_wlc_cback;             /*Wlc callback*/
+  tNFA_WLC_ACTIVATION* p_is_wlc_activated; /*check wlc activation*/
+  WLC_DATA() : p_wlc_cback(nullptr), p_is_wlc_activated(nullptr) {}
+} tNFA_DM_WLC_DATA;
+#endif
 /* DM control block */
 typedef struct {
   uint32_t flags; /* NFA_DM flags (see definitions for NFA_DM_FLAGS_*)    */
@@ -598,6 +611,7 @@ typedef struct {
                                   LISTEN_ACTIVE state which needs to be applied
                                   after current transaction is completed*/
 #if (NXP_EXTNS == TRUE)
+  tNFA_DM_WLC_DATA* wlc_data; /*Wlc specific data structure*/
   tNFA_TECHNOLOGY_MASK        pollTech;
   tNFA_TECHNOLOGY_MASK        listenTech;
   uint8_t selected_uicc_id; /* Current selected UICC ID */
@@ -659,6 +673,7 @@ void nfa_ee_init(void);
 void nfa_hci_init(void);
 #if (NXP_EXTNS == TRUE)
 void nfa_scr_init(void);
+void nfa_dm_update_wlc_data(tNFA_DM_WLC_DATA* p_wlc_data);
 #endif
 #else
 #define nfa_ee_init()

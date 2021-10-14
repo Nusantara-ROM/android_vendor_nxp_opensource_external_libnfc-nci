@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2020 NXP
+ *  Copyright 2018-2021 NXP
  *
  ******************************************************************************/
 
@@ -70,6 +70,10 @@
 #define NFA_STATUS_BUFFER_FULL NCI_STATUS_BUFFER_FULL
 /* failed               */
 #define NFA_STATUS_FAILED NCI_STATUS_FAILED
+#if (NXP_EXTNS == TRUE)
+/*Not initialized*/
+#define NFA_STATUS_NOT_INITIALIZED NCI_STATUS_NOT_INITIALIZED
+#endif
 /* Optional feature of NCI Spec not supported */
 #define NFA_STATUS_NOT_SUPPORTED NCI_STATUS_NOT_SUPPORTED
 /* Semantic error       */
@@ -80,9 +84,14 @@
 #define NFA_STATUS_INVALID_PARAM NCI_STATUS_INVALID_PARAM
 /* Already started      */
 #define NFA_STATUS_ALREADY_STARTED NCI_STATUS_ALREADY_STARTED
+/* RF frame error       */
+#define NFA_STATUS_RF_FRAME_CORRUPTED NCI_STATUS_RF_FRAME_CORRUPTED
+/* RF protocol error    */
+#define NFA_STATUS_RF_PROTOCOL_ERR NCI_STATUS_RF_PROTOCOL_ERR
 /* RF Timeout           */
 #define NFA_STATUS_TIMEOUT NCI_STATUS_TIMEOUT
 
+#define NFA_STATUS_CONTINUE NFC_STATUS_CONTINUE
 /* Out of GKI buffers */
 #define NFA_STATUS_NO_BUFFERS NFC_STATUS_NO_BUFFERS
 /* Protocol mismatch between API and activated one */
@@ -415,7 +424,8 @@ typedef struct {
 #define NFA_P2P_PAUSED_EVT 38
 /* P2P services resumed event */
 #define NFA_P2P_RESUMED_EVT 39
-
+/* T2T command completed */
+#define NFA_T2T_CMD_CPLT_EVT 40
 /* NFC deactivation type */
 #define NFA_DEACTIVATE_TYPE_IDLE NFC_DEACTIVATE_TYPE_IDLE
 #define NFA_DEACTIVATE_TYPE_SLEEP NFC_DEACTIVATE_TYPE_SLEEP

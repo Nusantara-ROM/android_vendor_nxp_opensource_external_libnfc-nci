@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2020 NXP
+ *  Copyright 2018-2021 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -176,7 +176,8 @@ static void nfa_dm_set_init_nci_params(void) {
 
     /* LF_T3T_PMM value is added to LF_T3T_IDENTIFIERS_X in NCI2.0. */
     for (xx = 0; xx < NFA_CE_LISTEN_INFO_MAX; xx++) {
-      for (uint8_t yy = 10; yy < NCI_PARAM_LEN_LF_T3T_ID(NFC_GetNCIVersion()); yy++)
+      for (uint8_t yy = 10; yy < NCI_PARAM_LEN_LF_T3T_ID(NFC_GetNCIVersion());
+           yy++)
         nfa_dm_cb.params.lf_t3t_id[xx][yy] = 0xFF;
     }
   } else {
@@ -363,15 +364,13 @@ static void nfa_dm_nfc_response_cback(tNFC_RESPONSE_EVT event,
       break;
 
 #if (NFC_NFCEE_INCLUDED == TRUE)
-    case NFC_NFCEE_DISCOVER_REVT: /* NFCEE Discover response */
-    case NFC_NFCEE_INFO_REVT:     /* NFCEE Discover Notification */
-    case NFC_EE_ACTION_REVT:      /* EE Action notification */
-    case NFC_NFCEE_MODE_SET_REVT: /* NFCEE Mode Set response */
-#if (NXP_EXTNS == TRUE)
-    case NFC_NFCEE_PL_CONTROL_REVT:
-    case NFC_NFCEE_STATUS_REVT:
-#endif
-    case NFC_SET_ROUTING_REVT:    /* Configure Routing response */
+    case NFC_NFCEE_DISCOVER_REVT:   /* NFCEE Discover response */
+    case NFC_NFCEE_INFO_REVT:       /* NFCEE Discover Notification */
+    case NFC_EE_ACTION_REVT:        /* EE Action notification */
+    case NFC_NFCEE_MODE_SET_REVT:   /* NFCEE Mode Set response */
+    case NFC_NFCEE_STATUS_REVT:     /* NFCEE Status notification*/
+    case NFC_SET_ROUTING_REVT:      /* Configure Routing response */
+    case NFC_NFCEE_PL_CONTROL_REVT: /* NFCEE pwr and link ctrl response */
       nfa_ee_proc_evt(event, p_data);
       break;
 
@@ -471,6 +470,16 @@ static void nfa_dm_nfc_response_cback(tNFC_RESPONSE_EVT event,
       conn_evt.status = p_data->status;
       nfa_dm_conn_cback_event_notify(NFA_UPDATE_RF_PARAM_RESULT_EVT, &conn_evt);
       break;
+
+#if (NXP_EXTNS == TRUE)
+    case NFC_WLC_FEATURE_SUPPORTED_REVT:
+    case NFC_RF_INTF_EXT_START_REVT:
+    case NFC_RF_INTF_EXT_STOP_REVT:
+      if (nfa_dm_cb.wlc_data && nfa_dm_cb.wlc_data->p_wlc_cback)
+        (*nfa_dm_cb.wlc_data->p_wlc_cback)(event, p_data->status);
+      break;
+#endif
+
     default:
       break;
   }
@@ -1018,6 +1027,12 @@ tNFA_STATUS nfa_dm_start_polling(void) {
     if (poll_tech_mask & NFA_TECHNOLOGY_MASK_KOVIO) {
       poll_disc_mask |= NFA_DM_DISC_MASK_P_KOVIO;
     }
+#if (NXP_EXTNS == TRUE)
+    if (!(nfc_cb.nci_interfaces & (1 << NCI_INTERFACE_NFC_DEP))) {
+      poll_disc_mask &= ~(NFA_DM_DISC_MASK_PACM_NFC_DEP|NFA_DM_DISC_MASK_PAA_NFC_DEP|
+                              NFA_DM_DISC_MASK_PFA_NFC_DEP|NFA_DM_DISC_MASK_PF_NFC_DEP);
+    }
+#endif
 
     nfa_dm_cb.poll_disc_handle = nfa_dm_add_rf_discover(
         poll_disc_mask, NFA_DM_DISC_HOST_ID_DH, nfa_dm_poll_disc_cback);
@@ -1559,6 +1574,13 @@ static void nfa_dm_act_data_cback(__attribute__((unused)) uint8_t conn_id,
   } else if (event == NFC_DEACTIVATE_CEVT) {
     NFC_SetStaticRfCback(nullptr);
   }
+#if (NXP_EXTNS == TRUE)
+    else if (event == NFC_ERROR_CEVT) {
+    LOG(ERROR) << StringPrintf(
+          "received NFC_ERROR_CEVT with status = 0x%X", p_data->status);
+      nfa_dm_rf_deactivate(NFA_DEACTIVATE_TYPE_DISCOVERY);
+  }
+#endif
 }
 
 /*******************************************************************************
@@ -1781,7 +1803,11 @@ static void nfa_dm_poll_disc_cback(tNFA_DM_RF_DISC_EVT event,
             (p_data->deactivate.type == NFC_DEACTIVATE_TYPE_SLEEP_AF)) {
           evt_data.deactivated.type = NFA_DEACTIVATE_TYPE_SLEEP;
         } else {
+#if (NXP_EXTNS == TRUE)
+          evt_data.deactivated.type = p_data->deactivate.type;
+#else
           evt_data.deactivated.type = NFA_DEACTIVATE_TYPE_IDLE;
+#endif
         }
         /* notify deactivation to application */
         nfa_dm_conn_cback_event_notify(NFA_DEACTIVATED_EVT, &evt_data);
@@ -1985,6 +2011,8 @@ std::string nfa_dm_nfc_revt_2_str(tNFC_RESPONSE_EVT event) {
       return "NFC_NFCEE_INFO_REVT";
     case NFC_NFCEE_MODE_SET_REVT:
       return "NFC_NFCEE_MODE_SET_REVT";
+    case NFC_NFCEE_PL_CONTROL_REVT:
+      return "NFC_NFCEE_PL_CONTROL_REVT";
     case NFC_RF_FIELD_REVT:
       return "NFC_RF_FIELD_REVT";
     case NFC_EE_ACTION_REVT:
@@ -2006,8 +2034,12 @@ std::string nfa_dm_nfc_revt_2_str(tNFC_RESPONSE_EVT event) {
     case NFC_NFCC_POWER_OFF_REVT:
       return "NFC_NFCC_POWER_OFF_REVT";
 #if (NXP_EXTNS == TRUE)
-    case NFC_NFCEE_PL_CONTROL_REVT:
-        return "NFA_EE_PWR_LINK_CTRL_EVT";
+    case NFC_WLC_FEATURE_SUPPORTED_REVT:
+      return "NFC_WLC_FEATURE_SUPPORTED_REVT";
+    case NFC_RF_INTF_EXT_START_REVT:
+      return "NFC_RF_INTF_EXT_START_EVT";
+    case NFC_RF_INTF_EXT_STOP_REVT:
+      return "NFC_RF_INTF_EXT_STOP_EVT";
 #endif
     default:
       return "unknown revt";

@@ -15,6 +15,25 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+/******************************************************************************
+ *
+ *  The original Work has been changed by NXP.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ *  Copyright 2020-2021 NXP
+ *
+ ******************************************************************************/
 
 /******************************************************************************
  *
@@ -926,6 +945,14 @@ bool nfa_ce_activate_ntf(tNFA_CE_MSG* p_ce_msg) {
     }
   } else if (p_cb->activation_params.intf_param.type ==
              NFC_INTERFACE_EE_DIRECT_RF) {
+#if (NXP_EXTNS == TRUE)
+    for (i = 0; i < NFA_CE_LISTEN_INFO_IDX_INVALID; i++) {
+      if ((p_cb->listen_info[i].flags & NFA_CE_LISTEN_INFO_IN_USE) &&
+          (p_cb->listen_info[i].flags & NFA_CE_LISTEN_INFO_T4T_AID)) {
+        p_cb->listen_info[i].flags |= NFA_CE_LISTEN_INFO_T4T_ACTIVATE_PND;
+      }
+    }
+#endif
     /* search any entry listening UICC */
     for (i = 0; i < NFA_CE_LISTEN_INFO_IDX_INVALID; i++) {
       if ((p_cb->listen_info[i].flags & NFA_CE_LISTEN_INFO_IN_USE) &&
@@ -1029,7 +1056,9 @@ bool nfa_ce_deactivate_ntf(tNFA_CE_MSG* p_ce_msg) {
 
     return true;
   } else {
+#if (NXP_EXTNS != TRUE)
     deact_type = NFC_DEACTIVATE_TYPE_IDLE;
+#endif
   }
 
   /* Tag is in idle state */
@@ -1043,7 +1072,13 @@ bool nfa_ce_deactivate_ntf(tNFA_CE_MSG* p_ce_msg) {
         conn_evt.deactivated.type = deact_type;
         if (p_cb->p_active_conn_cback)
           (*p_cb->p_active_conn_cback)(NFA_DEACTIVATED_EVT, &conn_evt);
-      } else if ((p_cb->activation_params.protocol == NFA_PROTOCOL_ISO_DEP) &&
+      } else if ((p_cb->activation_params.protocol == NFA_PROTOCOL_ISO_DEP
+#if (NXP_EXTNS == TRUE)
+                  /* Protocol type unknown check to notify deactivate NTF for
+                   * NFCEE Direct RF activation */
+                  || p_cb->activation_params.protocol == NFC_PROTOCOL_UNKNOWN
+#endif
+                  ) &&
                  (p_cb->listen_info[i].protocol_mask &
                   NFA_PROTOCOL_MASK_ISO_DEP)) {
         /* Don't send NFA_DEACTIVATED_EVT if NFA_ACTIVATED_EVT wasn't sent */
@@ -1518,3 +1553,22 @@ bool nfa_ce_api_cfg_isodep_tech(tNFA_CE_MSG* p_ce_msg) {
     nfa_ce_cb.isodep_disc_mask |= NFA_DM_DISC_MASK_LB_ISO_DEP;
   return true;
 }
+
+#if(NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function         nfa_ce_set_t4t_listen_params
+**
+** Description      Configure t4t listen parameter and call
+**                  CE_SetActivatedTagType with activation parameters
+**
+** Returns          none
+**
+*******************************************************************************/
+void nfa_ce_set_t4t_listen_params() {
+  tNFC_ACTIVATE_DEVT p_activate_params;
+  p_activate_params.protocol = NFC_PROTOCOL_ISO_DEP;
+  tCE_CBACK *p_ce_cback = nfa_ce_handle_t4t_evt;
+  CE_SetActivatedTagType(&p_activate_params, 0, p_ce_cback);
+}
+#endif

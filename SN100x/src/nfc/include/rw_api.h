@@ -31,7 +31,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 *
-*  Copyright 2018-2019 NXP
+*  Copyright 2018-2020 NXP
 *
 ******************************************************************************/
 
@@ -143,6 +143,7 @@ enum {
   RW_I93_RAW_FRAME_EVT,        /* Response of raw frame sent         */
   RW_I93_INTF_ERROR_EVT,       /* RF Interface error event           */
   RW_I93_MAX_EVT,
+
   /* Mifare Classic tag events for tRW_CBACK */
   RW_MFC_NDEF_DETECT_EVT =
       RW_MFC_FIRST_EVT,      /* Result of NDEF detection procedure       */
@@ -193,6 +194,9 @@ typedef uint8_t tRW_NDEF_FLAG;
 /* options for RW_T4tPresenceCheck  */
 #define RW_T4T_CHK_EMPTY_I_BLOCK 1
 #define RW_T4T_CHK_ISO_DEP_NAK_PRES_CHK 5
+
+#define RW_I93_MODE_ADDRESSED 0
+#define RW_I93_MODE_NON_ADDRESSED 1
 
 typedef struct {
   tNFC_STATUS status;
@@ -960,7 +964,7 @@ extern tNFC_STATUS RW_T4tReadNDef(void);
 **                  NFC_STATUS_FAILED if T4T is busy or other error
 **
 *******************************************************************************/
-extern tNFC_STATUS RW_T4tUpdateNDef(uint16_t length, uint8_t* p_data);
+extern tNFC_STATUS RW_T4tUpdateNDef(uint32_t length, uint8_t* p_data);
 
 /*****************************************************************************
 **
@@ -1029,7 +1033,7 @@ extern tNFC_STATUS RW_I93Inventory(bool including_afi, uint8_t afi,
 **                  NFC_STATUS_FAILED if other error
 **
 *******************************************************************************/
-extern tNFC_STATUS RW_I93StayQuiet(void);
+extern tNFC_STATUS RW_I93StayQuiet(uint8_t* p_uid);
 
 /*******************************************************************************
 **
@@ -1353,6 +1357,22 @@ extern tNFC_STATUS RW_I93SetTagReadOnly(void);
 *****************************************************************************/
 extern tNFC_STATUS RW_I93PresenceCheck(void);
 
+/*****************************************************************************
+**
+** Function         RW_I93SetAddressingMode
+**
+** Description      Set if the tag must be addressed with UID or not.
+**
+**                  The addressing mode (addressed or non-addressed) must be
+**                  done at the module initialization prior to the Tag
+**                  activation.
+**
+** Returns          NFC_STATUS_OK, if mode is stored
+**                  NFC_STATUS_FAILED: other error
+**
+*****************************************************************************/
+extern tNFC_STATUS RW_I93SetAddressingMode(bool mode);
+
 /*******************************************************************************
 **
 ** Function         RW_SendRawFrame
@@ -1375,7 +1395,6 @@ extern tNFC_STATUS RW_SendRawFrame(uint8_t* p_raw_data, uint16_t data_len);
 *******************************************************************************/
 extern tNFC_STATUS RW_SetActivatedTagType(tNFC_ACTIVATE_DEVT* p_activate_params,
                                           tRW_CBACK* p_cback);
-
 /*******************************************************************************
 **
 ** Function         RW_MfcDetectNDef

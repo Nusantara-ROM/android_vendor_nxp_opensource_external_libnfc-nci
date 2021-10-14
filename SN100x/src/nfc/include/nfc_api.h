@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2020 NXP
+ *  Copyright 2018-2021 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -55,9 +55,10 @@
 #if (NXP_EXTNS == TRUE)
 #define NXP_EN_SN110U    1
 #define NXP_EN_SN100U    1
-#define NXP_ANDROID_VER (11U)        /* NXP android version */
-#define NFC_NXP_MW_VERSION_MAJ (0x02) /* MW Major Version */
-#define NFC_NXP_MW_VERSION_MIN (0x00) /* MW Minor Version */
+#define NXP_EN_SN220U    1
+#define NXP_ANDROID_VER (12U)        /* NXP android version */
+#define NFC_NXP_MW_VERSION_MAJ (0x04) /* MW Major Version */
+#define NFC_NXP_MW_VERSION_MIN (0x01) /* MW Minor Version */
 #define NFC_NXP_MW_CUSTOMER_ID (0x00) /* MW Customer Id */
 #define NFC_NXP_MW_RC_VERSION  (0x00) /* MW RC Version */
 #define NFC_EE_DISC_OP_REMOVE 1
@@ -149,6 +150,8 @@ typedef uint8_t tNFC_STATUS;
 #define UICC2_HOST ((unsigned char)0x81)
 #define DH_HOST ((unsigned char)0x00)
 #define ESE_HOST ((unsigned char)0xC0)
+#define NCI_SELECT_CMD_P1 0x04
+#define NFC_SELECT_CMD_INS 0xA4
 #define NXP_FEATURE_ENABLED \
   ((unsigned char)0x01) /* flag to indicate NXP feature is enabled*/
 #define NXP_FEATURE_DISABLED \
@@ -201,8 +204,14 @@ typedef uint8_t tNFC_STATUS;
  * NFC Config Parameter IDs defined by NCI
  **********************************************/
 #define NFC_PMID_TOTAL_DURATION NCI_PARAM_ID_TOTAL_DURATION
+#define NFC_PMID_PA_BAILOUT NCI_PARAM_ID_PA_BAILOUT
 #define NFC_PMID_PF_RC NCI_PARAM_ID_PF_RC
+#define NFC_PMID_PB_BAILOUT NCI_PARAM_ID_PB_BAILOUT
+#define NFC_PMID_PF_BIT_RATE NCI_PARAM_ID_PF_BIT_RATE
+#define NFC_PMID_PF_BAILOUT NCI_PARAM_ID_PF_BAILOUT
+#define NFC_PMID_PF_DEVICES_LIMIT NCI_PARAM_ID_PF_DEVICES_LIMIT
 #define NFC_PMID_ATR_REQ_GEN_BYTES NCI_PARAM_ID_ATR_REQ_GEN_BYTES
+#define NFC_PMID_ATR_REQ_CONFIG NCI_PARAM_ID_ATR_REQ_CONFIG
 #define NFC_PMID_LA_HIST_BY NCI_PARAM_ID_LA_HIST_BY
 #define NFC_PMID_LA_NFCID1 NCI_PARAM_ID_LA_NFCID1
 #define NFC_PMID_LA_BIT_FRAME_SDD NCI_PARAM_ID_LA_BIT_FRAME_SDD
@@ -223,6 +232,7 @@ typedef uint8_t tNFC_STATUS;
 #define NFC_PMID_WT NCI_PARAM_ID_WT
 #define NFC_PMID_ATR_RES_GEN_BYTES NCI_PARAM_ID_ATR_RES_GEN_BYTES
 #define NFC_PMID_ATR_RSP_CONFIG NCI_PARAM_ID_ATR_RSP_CONFIG
+#define NFC_PMID_PACM_BIT_RATE NCI_PARAM_ID_PACM_BIT_RATE
 #define NFC_PMID_RF_FIELD_INFO NCI_PARAM_ID_RF_FIELD_INFO
 
 /* Technology based routing  */
@@ -284,7 +294,11 @@ enum {
   NFC_NFCEE_STATUS_REVT             /* NFCEE Status Notification     */
                                     /* First vendor-specific rsp event  */
 #if (NXP_EXTNS == TRUE)
-  ,NFC_NFCEE_MODE_SET_INFO          /*  NFCEE Mode Set Notification event*/
+  ,
+  NFC_WLC_FEATURE_SUPPORTED_REVT, /* WLC Feature supported by NFCC */
+  NFC_RF_INTF_EXT_START_REVT,     /* RF Intf Ext start response    */
+  NFC_RF_INTF_EXT_STOP_REVT,      /* RF Intf Ext stop response     */
+  NFC_NFCEE_MODE_SET_INFO         /* NFCEE Mode Set Notification event*/
 #endif
 };
 typedef uint16_t tNFC_RESPONSE_EVT;
@@ -388,6 +402,7 @@ typedef struct {
 #define NFC_NFCEE_STS_UNRECOVERABLE_ERROR        NCI_NFCEE_STS_UNRECOVERABLE_ERROR
 #define NFC_NFCEE_STS_INIT_STARTED               NCI_NFCEE_STS_INIT_STARTED
 #define NFC_NFCEE_STS_INIT_COMPLETED             NCI_NFCEE_STS_INIT_COMPLETED
+#define NFC_NFCEE_STS_PMUVCC_OFF                 NCI_NFCEE_STS_PMUVCC_OFF
 #define NFC_NFCEE_STS_PROP_UNRECOVERABLE_ERROR   NCI_NFCEE_STS_PROP_NONE
 #endif
 
@@ -433,6 +448,7 @@ typedef struct {
   uint8_t nfcee_id;   /* NFCEE ID                         */
   uint8_t num_tlvs;   /* number of TLVs                   */
   uint8_t tlv_size;   /* the total len of all TLVs        */
+  uint8_t qualifier_type;                  /* qualifier type */
   uint8_t param_tlvs[NFC_MAX_EE_TLV_SIZE]; /* the TLVs         */
 } tNFC_GET_ROUTING_REVT;
 
@@ -511,6 +527,9 @@ typedef uint8_t tNFC_PROTOCOL;
 #define NFC_DISCOVERY_TYPE_POLL_A NCI_DISCOVERY_TYPE_POLL_A
 #define NFC_DISCOVERY_TYPE_POLL_B NCI_DISCOVERY_TYPE_POLL_B
 #define NFC_DISCOVERY_TYPE_POLL_F NCI_DISCOVERY_TYPE_POLL_F
+#if (NXP_EXTNS == TRUE)
+#define NFC_DISCOVERY_TYPE_POLL_WLC NCI_DISCOVERY_TYPE_POLL_WLC
+#endif
 #define NFC_DISCOVERY_TYPE_POLL_A_ACTIVE NCI_DISCOVERY_TYPE_POLL_A_ACTIVE
 #define NFC_DISCOVERY_TYPE_POLL_F_ACTIVE NCI_DISCOVERY_TYPE_POLL_F_ACTIVE
 #define NFC_DISCOVERY_TYPE_POLL_ACTIVE NCI_DISCOVERY_TYPE_POLL_ACTIVE
@@ -1069,6 +1088,17 @@ extern tNFC_STATUS NFC_NfceeDiscover(bool discover);
 
 /*******************************************************************************
 **
+** Function         NFC_NfceeClearWaitModeSetNtf
+**
+** Description      Clear Nfcee Mode set notification wait flag
+**
+** Returns          void
+**
+*******************************************************************************/
+void NFC_NfceeClearWaitModeSetNtf(void);
+
+/*******************************************************************************
+**
 ** Function         NFC_NfceeModeSet
 **
 ** Description      This function is called to activate or de-activate an NFCEE
@@ -1498,5 +1528,56 @@ extern void NFC_SetStaticHciCback(tNFC_CONN_CBACK* p_cback);
 **
 *******************************************************************************/
 extern std::string NFC_GetStatusName(tNFC_STATUS status);
+
+/*******************************************************************************
+**
+** Function         NFC_SetFeatureList
+**
+** Description      This function to find the Chip type and configure the
+**                  supported feature list.
+**
+** Parameters       nfc_fw_version - FW version info.
+**
+** Returns          Nothing
+**
+*******************************************************************************/
+extern void NFC_SetFeatureList(tNFC_FW_VERSION nfc_fw_version);
+
+/*******************************************************************************
+**
+** Function         NFC_RfIntfExtStart
+**
+** Description      This function is called to send the Rf Interface Extension
+**                  start command
+**
+** Parameters       params :
+                    intf_ext_type - Type of Rf Interface Extension to start.
+**                  p_start_param - The parameter Value list
+**                  start_param_size - Size of start parameter
+**
+** Returns          tNFC_STATUS
+**
+*******************************************************************************/
+extern tNFC_STATUS NFC_RfIntfExtStart(uint8_t intf_ext_type,
+                                      uint8_t* p_start_param,
+                                      uint8_t start_param_size);
+
+/*******************************************************************************
+**
+** Function         NFC_RfIntfExtStop
+**
+** Description      This function is called to send the Rf Interface Extension
+**                  stop command
+**
+** Parameters       params :
+**                  intf_ext_type - Type of Rf Interface Extension to start.
+**                  p_stop_param - The parameter Value list
+**                  stop_param_size - Size of stop parameter
+**
+** Returns          tNFC_STATUS
+**
+*******************************************************************************/
+tNFC_STATUS NFC_RfIntfExtStop(uint8_t intf_ext_type, uint8_t* p_stop_param,
+                                  uint8_t stop_param_size);
 
 #endif /* NFC_API_H */

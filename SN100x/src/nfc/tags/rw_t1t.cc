@@ -268,8 +268,8 @@ void rw_t1t_conn_cback(uint8_t conn_id, tNFC_CONN_EVT event,
           p_data->data.p_data = nullptr;
         }
       }
-      [[fallthrough]];
-    /* Data event with error status...fall through to NFC_ERROR_CEVT case */
+      /* Data event with error status...fall through to NFC_ERROR_CEVT case */
+      FALLTHROUGH_INTENDED;
 
     case NFC_ERROR_CEVT:
       if ((p_t1t->state == RW_T1T_STATE_NOT_ACTIVATED) ||
@@ -628,7 +628,7 @@ static void rw_t1t_process_error(void) {
   rw_event = rw_t1t_info_to_event(p_cmd_rsp_info);
   if (p_t1t->state != RW_T1T_STATE_NOT_ACTIVATED) rw_t1t_handle_op_complete();
 
-  if (rw_event == RW_T2T_NDEF_DETECT_EVT) {
+  if (rw_event == RW_T1T_NDEF_DETECT_EVT) {
     tRW_DETECT_NDEF_DATA ndef_data;
     ndef_data.status = NFC_STATUS_TIMEOUT;
     ndef_data.protocol = NFC_PROTOCOL_T1T;

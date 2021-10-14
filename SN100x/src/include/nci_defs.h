@@ -54,6 +54,7 @@
 #define NCI_MAX_VSC_SIZE 0xFF
 #if (NXP_EXTNS == TRUE)
 #define APPL_DTA_MODE TRUE
+#define NCI_MAX_DATA_PAYLOAD_SIZE 0xFF
 #endif
 /* NCI header (3) + callback function pointer(8; use 8 to be safe) + HCIT (1
  * byte) */
@@ -182,6 +183,7 @@
 #define NCI_STATUS_ACTIVATION_FAILED 0xA1
 #define NCI_STATUS_TEAR_DOWN 0xA2
 /* RF Interface */
+#define NCI_STATUS_RF_FRAME_CORRUPTED 0x02
 #define NCI_STATUS_RF_TRANSMISSION_ERR 0xB0
 #define NCI_STATUS_RF_PROTOCOL_ERR 0xB1
 #define NCI_STATUS_TIMEOUT 0xB2
@@ -190,7 +192,6 @@
 #define NCI_STATUS_EE_TRANSMISSION_ERR 0xC1
 #define NCI_STATUS_EE_PROTOCOL_ERR 0xC2
 #define NCI_STATUS_EE_TIMEOUT 0xC3
-
 
 /* RF Technologies */
 #define NCI_RF_TECHNOLOGY_A 0x00
@@ -236,6 +237,10 @@
 #define NCI_MSG_RF_EE_ACTION 9
 #define NCI_MSG_RF_EE_DISCOVERY_REQ 10
 #define NCI_MSG_RF_PARAMETER_UPDATE 11
+#if (NXP_EXTNS == TRUE)
+#define NCI_MSG_RF_INTF_EXT_START 12
+#define NCI_MSG_RF_INTF_EXT_STOP 13
+#endif
 #define NCI_MSG_RF_ISO_DEP_NAK_PRESENCE 16
 
 /**********************************************
@@ -304,6 +309,7 @@
 #define NCI_NFCEE_STS_UNRECOVERABLE_ERROR 0x00
 #define NCI_NFCEE_STS_INIT_STARTED        0x01
 #define NCI_NFCEE_STS_INIT_COMPLETED      0x02
+#define NCI_NFCEE_STS_PMUVCC_OFF          0x81
 #define NCI_NFCEE_STS_PROP_NONE           0x90
 #endif
 
@@ -315,11 +321,14 @@
 /****************************************************
  * NCI NFCEE INterface specific status Codes
  ****************************************************/
+#define NCI_NFCEE_STS_UNRECOVERABLE_ERROR 0x00
 #define NCI_NFCEE_STS_INTF_ACTIVATION_FAILED 0xC0
 #define NCI_NFCEE_STS_TRANSMISSION_ERROR 0xC1
 #define NCI_NFCEE_STS_PROTOCOL_ERROR 0xC2
 #define NCI_NFCEE_STS_TIMEOUT_ERROR 0xC3
 
+#define NCI_STATUS_PMU_TXLDO_OVERCURRENT 0xE3
+#define NCI_STATUS_GPADC_ERROR 0xE7
 #define NCI_NFCEE_STS_COLD_TEMP_THRESOLD_REACHED 0xEB
 
 #define NCI_NFCEE_STS_CONN_ACTIVE 0x00
@@ -384,6 +393,12 @@ typedef uint8_t tNCI_NFCEE_PL_CONFIG;
 #define NCI_INTERFACE_FIRST_VS 0x80
 typedef uint8_t tNCI_INTF_TYPE;
 
+#if (NXP_EXTNS == TRUE)
+/**********************************************
+ * NCI Interface Extension Types
+ **********************************************/
+#define NCI_INTERFACE_EXTN_RF_WLC 0x81
+#endif
 /**********************************************
  * NCI RF Management / DISCOVERY Group Params
  **********************************************/
@@ -419,6 +434,9 @@ typedef uint8_t tNCI_INTF_TYPE;
 #define NCI_DISCOVERY_TYPE_POLL_B 0x01
 #define NCI_DISCOVERY_TYPE_POLL_F 0x02
 #define NCI_DISCOVERY_TYPE_POLL_V 0x06
+#if (NXP_EXTNS == TRUE)
+#define NCI_DISCOVERY_TYPE_POLL_WLC 0x73
+#endif
 #define NCI_DISCOVERY_TYPE_POLL_A_ACTIVE 0x03
 /* NCI2.0 standardizes P2P poll active*/
 #define NCI_DISCOVERY_TYPE_POLL_ACTIVE 0x03
@@ -500,17 +518,22 @@ typedef uint8_t tNCI_DISCOVERY_TYPE;
 #define NCI_PARAM_ID_CON_DEVICES_LIMIT 0x01
 #define NCI_PARAM_ID_CON_DISCOVERY_PARAM 0x02
 #define NCI_PARAM_ID_PA_BAILOUT 0x08
+#define NCI_PARAM_ID_PA_DEVICES_LIMIT 0x09
 #define NCI_PARAM_ID_PB_AFI 0x10
 #define NCI_PARAM_ID_PB_BAILOUT 0x11
 #define NCI_PARAM_ID_PB_ATTRIB_PARAM1 0x12
+#define NCI_PARAM_ID_PB_DEVICES_LIMIT 0x14
 #define NCI_PARAM_ID_PF_BIT_RATE 0x18
 #define NCI_PARAM_ID_PF_RC 0x19
+#define NCI_PARAM_ID_PF_BAILOUT 0x19
+#define NCI_PARAM_ID_PF_DEVICES_LIMIT 0x1A
 #define NCI_PARAM_ID_PB_H_INFO 0x20
 #define NCI_PARAM_ID_PI_BIT_RATE 0x21
 
 #define NCI_PARAM_ID_BITR_NFC_DEP 0x28
 #define NCI_PARAM_ID_ATR_REQ_GEN_BYTES 0x29
 #define NCI_PARAM_ID_ATR_REQ_CONFIG 0x2A
+#define NCI_PARAM_ID_PV_DEVICES_LIMIT 0x2F
 
 #define NCI_PARAM_ID_LA_BIT_FRAME_SDD 0x30
 #define NCI_PARAM_ID_LA_PLATFORM_CONFIG 0x31
@@ -557,6 +580,7 @@ typedef uint8_t tNCI_DISCOVERY_TYPE;
 #define NCI_PARAM_ID_WT 0x60
 #define NCI_PARAM_ID_ATR_RES_GEN_BYTES 0x61
 #define NCI_PARAM_ID_ATR_RSP_CONFIG 0x62
+#define NCI_PARAM_ID_PACM_BIT_RATE 0x68
 
 #define NCI_PARAM_ID_RF_FIELD_INFO 0x80
 #define NCI_PARAM_ID_NFC_DEP_OP 0x82

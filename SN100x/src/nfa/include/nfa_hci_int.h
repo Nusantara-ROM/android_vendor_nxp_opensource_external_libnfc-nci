@@ -31,7 +31,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  Copyright 2018-2020 NXP
+ *  Copyright 2018-2021 NXP
  *
  ******************************************************************************/
 /******************************************************************************
@@ -57,6 +57,9 @@ extern uint8_t HCI_LOOPBACK_DEBUG;
 
 #define NFA_HCI_HOST_ID_UICC0 0x02 /* Host ID for UICC 0 */
 #if (NXP_EXTNS == TRUE)
+/* HCI Host Type length */
+#define NFA_HCI_HOST_TYPE_LEN 2
+
 #define NFA_HCI_HOST_ID_DYNAMIC_HOST0 0x80 /*Host ID for prop dyn host 0*/
 #define NFA_HCI_HOST_ID_PROP_HOST0 0xC0 /*Host ID for prop eSE 0*/
 
@@ -572,13 +575,16 @@ typedef struct {
   uint8_t active_host[NFA_HCI_MAX_HOST_IN_NETWORK]; /* active host in the
                                                          host network */
   uint8_t se_apdu_gate_support;
+  uint8_t uicc_etsi_support;
 #else
   uint8_t inactive_host[NFA_HCI_MAX_HOST_IN_NETWORK]; /* Inactive host in the
                                                          host network */
   uint8_t reset_host[NFA_HCI_MAX_HOST_IN_NETWORK]; /* List of host reseting */
 #endif
   bool b_low_power_mode;  /* Host controller in low power mode */
+#if(NXP_EXTNS != TRUE)
   bool b_hci_new_sessionId; /* Command sent to set a new session Id */
+#endif
   bool b_hci_netwk_reset; /* Command sent to reset HCI Network */
   bool w4_hci_netwk_init; /* Wait for other host in network to initialize */
   TIMER_LIST_ENT timer;   /* Timer to avoid indefinitely waiting for response */
@@ -641,6 +647,7 @@ typedef struct {
     tNFA_LINK_MGMT_GATE_INFO link_mgmt_gate;
     tNFA_ID_MGMT_GATE_INFO id_mgmt_gate;
   } cfg;
+
 } tNFA_HCI_CB;
 
 /*****************************************************************************
